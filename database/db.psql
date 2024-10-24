@@ -1,0 +1,145 @@
+-- SCHEMA: lbaw22133
+
+-- DROP SCHEMA IF EXISTS lbaw22133 ;
+
+SET search_path to lbaw22133;
+
+CREATE SCHEMA IF NOT EXISTS lbaw22133
+    AUTHORIZATION postgres;
+	
+	
+DROP TABLE IF EXISTS project CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS subject CASCADE;
+DROP TABLE IF EXISTS members CASCADE;
+DROP TABLE IF EXISTS autorship CASCADE;
+DROP TABLE IF EXISTS invite CASCADE;
+DROP TABLE IF EXISTS commentss CASCADE;
+DROP TABLE IF EXISTS task CASCADE;
+DROP TABLE IF EXISTS taskcomplete CASCADE;
+DROP TABLE IF EXISTS tasknocomplete CASCADE;
+DROP FUNCTION IF EXISTS participate_in_project;
+
+-- Tables
+
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL
+);
+
+
+CREATE TABLE subject (
+    id SERIAL PRIMARY KEY,
+    code TEXT UNIQUE,
+    course TEXT,
+    year INTEGER,
+    name TEXT UNIQUE
+);
+
+CREATE TABLE project(
+    id SERIAL PRIMARY KEY,
+    name TEXT not null,
+    grade INTEGER,
+    details TEXT,
+    archive BOOLEAN NOT NULL,
+    idSubject INTEGER REFERENCES subject(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE members(
+	id SERIAL PRIMARY KEY,
+	coordinator BOOLEAN,
+	user_id INTEGER REFERENCES users NOT NULL ,
+	project_id INTEGER REFERENCES project NOT NULL
+);
+
+CREATE TABLE autorship(
+	id SERIAL PRIMARY KEY,
+	idUser INTEGER REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+	idProject INTEGER REFERENCES project(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE invite(
+	id SERIAL PRIMARY KEY,
+	invdate DATE NOT NULL,
+	details TEXT,
+	idUser INTEGER REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE task(
+	id SERIAL PRIMARY KEY,
+	taskName TEXT NOT NULL,
+	createdate DATE NOT NULL, 
+	details TEXT NOT NULL,
+	creator TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE commentss(
+	id SERIAL PRIMARY KEY,
+	createdate DATE NOT NULL,
+	idUser INTEGER REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+	idTask INTEGER REFERENCES task(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+
+
+CREATE TABLE taskcomplete(
+	id INTEGER PRIMARY KEY REFERENCES task(id) ON DELETE CASCADE ON UPDATE CASCADE,
+	completeddate DATE,
+	status BOOLEAN
+);
+
+CREATE TABLE tasknocomplete(
+	id INTEGER PRIMARY KEY REFERENCES task(id) ON DELETE CASCADE ON UPDATE CASCADE,
+	deadline date
+);
+
+-- INDEXES
+
+CREATE INDEX invites ON invite USING hash (id); 
+CREATE INDEX task_comment ON commentss USING hash (idTask);
+CREATE INDEX usermember_projects ON members USING hash (idUser);
+
+
+
+
+
+--Populate database
+
+
+--Triggers
+
+CREATE FUNCTION participate_in_project() RETURNS TRIGGER AS
+$BODY$
+BEGIN
+        IF EXISTS (SELECT * FROM members WHERE NEW.idUser = idUser) THEN
+           RAISE EXCEPTION 'User Member accounts are independent of the user accounts, i.e. they cannot create or join in a projects.';
+        END IF;
+        RETURN NEW;
+END
+$BODY$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER create_project
+        BEFORE INSERT OR UPDATE ON members
+        FOR EACH ROW
+        EXECUTE PROCEDURE participate_in_project();
+
+--Transaction
+
+
+BEGIN TRANSACTION;
+
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+--Delete tasknocomplete
+DELETE FROM tasknocomplete where id = id;
+
+--Insert Completed
+INSERT INTO taskcomplete (id, completeddate, status) VALUES (id, completeddate, status);
+
+END TRANSACTION;
+
+
+
